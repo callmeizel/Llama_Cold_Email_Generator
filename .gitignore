@@ -1,0 +1,4 @@
+*.env
+vectorstore/
+project_env/
+_pycache_/
