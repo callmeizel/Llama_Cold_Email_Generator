@@ -1,6 +1,10 @@
+# enviromental variable
 *.env
 vectorstore/
 project_env/
+
+# python cache
+
 __pycache__/
 *.pyc
 *.pyo

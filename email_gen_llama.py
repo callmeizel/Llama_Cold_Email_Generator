@@ -2,18 +2,18 @@ import pandas as pd
 from dotenv import load_dotenv
 import os
 
-from langchain_community.document_loaders import WebBaseLoader
-from langchain_core.output_parsers import JsonOutputParser
-from langchain.prompts import PromptTemplate
-from langchain_groq import ChatGroq
+from langchain_community.document_loaders import WebBaseLoader # to scrape a webpage
+from langchain_core.output_parsers import JsonOutputParser # to parser the llm output into json/dict format
+from langchain.prompts import PromptTemplate # llm template to use
+from langchain_groq import ChatGroq # using grop api
 
-import chromadb
-import uuid
+import chromadb # vector database
+import uuid # to set ids in the database for the documents 
 
 
-_=load_dotenv()
+_=load_dotenv() # for hiding api keys
 
-class email_generator:
+class email_generator: # main class
     def __init__(self,url):
         self.url = url
     
@@ -41,7 +41,7 @@ class email_generator:
         
         if not self.collection.count():
             for _,rows in self.df.iterrows():
-                self.collection.add(documents=rows['Techstack'],
+                self.collection.add(documents=rows['Techstack'], # get the rows values from teh column 'Techstack'
                                     metadatas={'Links':rows['Links']}, # metadata are in form of a dictonary
                                     ids=[str(uuid.uuid4())])
         
@@ -51,6 +51,9 @@ class email_generator:
     def side_llm(self,scrapped_data):
         
         self.scrapped_data=scrapped_data
+        
+        # Template for extrating the key infos from the scraped page.
+        
         self.data_from_site_temp = PromptTemplate.from_template("""
                                                      ### SCCRAPE TEXT FROM WEBSITE:
                                                      {page_data}
@@ -59,11 +62,11 @@ class email_generator:
                                                      your job is to extract the job postings and return them in JSON format cotaining
                                                      following keys: 'role','experience;','skills','description'.
                                                      Olny return the valid JSON
-                                                     ### VALID JSON (NO PREAMBLE)""")
+                                                     ### VALID JSON (NO PREAMBLE)""") 
         
         self.llm  = ChatGroq(model = 'llama-3.3-70b-versatile',
                temperature=0.3,
-               api_key=f'{os.getenv('GROQ_LLAMA_APIKEY')}')
+               api_key=f'{os.getenv('GROQ_LLAMA_APIKEY')}') # hidden api key for safety using getenv
         
         self.chain = self.data_from_site_temp | self.llm
         
@@ -80,7 +83,7 @@ class email_generator:
         
         return self.json_formatted
     
-    def links_from_db(self,db,url_info):
+    def links_from_db(self,db,url_info): # for extracting the asked skills from the extracted page information
         
         self.links = db.query(query_texts=url_info['skills'],
                                            n_results=2).get('metadatas',[])
@@ -91,13 +94,15 @@ class email_generator:
     
     def cold_email_llm(self, description, metadata,temperature=1,token_size=564,template_no="template-1"):
         
-        self.description = description
-        self.metadata = metadata
+        self.description = description # extracted info from the webpage in JSON format
+        self.metadata = metadata # fromt the external document file as here tis 'my_portfolio.csv'
         
-        self.temperature = temperature
-        self.token_size = token_size
-        self.template_no = template_no
-    
+        self.temperature = temperature # temperate perameter
+        self.token_size = token_size # max_token parameter 
+        self.template_no = template_no # choice of the Template 
+
+        
+        # Template no.1 to use
         self.prompt_tempt_1 = PromptTemplate.from_template(template="""
                                                  ### JOB DESCRIPTION:
                                                  {job_description}
@@ -111,6 +116,7 @@ class email_generator:
                                                  DO NOT PROVIDE A PREAMBLE.
                                                  ### EMAIL (NO PREAMBLE):""")
         
+        # Template no.2 to use
         self.prompt_tempt_2 = PromptTemplate.from_template(template="""
                                                           ### JOB DESCRIPTION (TECHNICAL SPECIFICATIONS):
                                                         {job_description}
@@ -130,6 +136,7 @@ class email_generator:
                                                         
                                                         ### TECHNICAL OUTREACH EMAIL (NO PREAMBLE):""")
 
+        # Template no.3 to use
         self.prompt_tempt_3 = PromptTemplate.from_template(template="""
                                                                     ### CLIENT REQUIREMENTS:
                                                                     {job_description}
@@ -154,6 +161,9 @@ class email_generator:
                     max_tokens=float(self.token_size),
                     api_key=f'{os.getenv('GROQ_LLAMA_APIKEY')}')
         
+        
+        # Choices to change the template choices
+        
         if self.template_no == "template-1":
             self.mail_chain = self.prompt_tempt_1 | self.llm2
             
@@ -162,6 +172,8 @@ class email_generator:
             
         elif self.template_no == "template-3":
             self.mail_chain = self.prompt_tempt_3 | self.llm2
+            
+        # Getting the cold email generation from the llm
         
         self.mail_output = self.mail_chain.invoke(input={'job_description':str(self.description['description']),
                                                          'link_list':self.metadata})
